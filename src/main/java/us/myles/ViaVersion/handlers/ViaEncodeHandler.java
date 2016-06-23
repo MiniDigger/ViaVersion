@@ -15,7 +15,7 @@ import us.myles.ViaVersion.util.PipelineUtil;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 
-public class ViaEncodeHandler extends MessageToByteEncoder {
+public class ViaEncodeHandler extends MessageToByteEncoder implements ViaHandler {
     private final UserConnection info;
     private final MessageToByteEncoder minecraftEncoder;
 
@@ -32,17 +32,23 @@ public class ViaEncodeHandler extends MessageToByteEncoder {
             ver.setAccessible(true);
             ver.set(minecraftEncoder, ver.get(this));
         }
+
         // handle the packet type
         if (!(o instanceof ByteBuf)) {
             // call minecraft encoder
             try {
-                PipelineUtil.callEncode(this.minecraftEncoder, ctx, o, bytebuf);
+                PipelineUtil.callEncode(this.minecraftEncoder, new ChannelHandlerContextWrapper(ctx, this), o, bytebuf);
             } catch (InvocationTargetException e) {
                 if (e.getCause() instanceof Exception) {
                     throw (Exception) e.getCause();
                 }
             }
         }
+
+        transform(bytebuf);
+    }
+
+    public void transform(ByteBuf bytebuf) throws Exception {
         if (bytebuf.readableBytes() == 0) {
             throw new CancelException();
         }
