@@ -12,28 +12,34 @@
 checkforupdates: true
 # Send the supported versions with the Status (Ping) response packet
 send-supported-versions: false
+# Block specific Minecraft protocols that ViaVersion allows
+# List of all Minecraft protocol versions: http://wiki.vg/Protocol_version_numbers
+block-protocols: []
+# Change the blocked disconnect message
+block-disconnect-msg: "You are using an unsupported Minecraft version!"
 #
 #----------------------------------------------------------#
 #                  GLOBAL PACKET LIMITER                    #
 #----------------------------------------------------------#
 #
-# Anti-Cheat, Packets Per Second (PPS) limiter
+#
+# Packets Per Second (PPS) limiter (Use -1 on max-pps and tracking-period to disable)
 # Clients by default send around 20-90 packets per second.
-
+#
 # What is the maximum per second a client can send (Use %pps to display their pps)
 # Use -1 to disable.
 max-pps: 600
 max-pps-kick-msg: "You are sending too many packets!"
-
+#
 # We can also kick them if over a period they send over a threshold a certain amount of times.
-
+#
 # Period to track (in seconds)
 # Use -1 to disable.
 tracking-period: 6
 # How many packets per second counts as a warning
 tracking-warning-pps: 120
 # How many warnings over the interval can we have
-# This can never be higher than "tracking-interval"
+# This can never be higher than "tracking-period"
 tracking-max-warnings: 4
 tracking-max-kick-msg: "You are sending too many packets, :("
 #
@@ -76,4 +82,4 @@ replace-pistons: false
 # What id should we replace with, default is air. (careful of players getting stuck standing on them)
 replacement-piston-id: 0
 # Force the string -> json transform
-force-json-transform: true
+force-json-transform: false

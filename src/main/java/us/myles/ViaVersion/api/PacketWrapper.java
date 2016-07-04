@@ -3,6 +3,7 @@ package us.myles.ViaVersion.api;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
 import lombok.Getter;
 import lombok.Setter;
 import us.myles.ViaVersion.api.data.UserConnection;
@@ -223,6 +224,7 @@ public class PacketWrapper {
         }
         if (readableObjects.size() > 0) {
             packetValues.addAll(readableObjects);
+            readableObjects.clear();
         }
 
         int index = 0;
@@ -267,7 +269,7 @@ public class PacketWrapper {
 
     private void writeRemaining(ByteBuf output) {
         if (inputBuffer != null) {
-            output.writeBytes(inputBuffer);
+            output.writeBytes(inputBuffer, inputBuffer.readableBytes());
         }
     }
 
@@ -282,28 +284,42 @@ public class PacketWrapper {
      */
     public void send(Class<? extends Protocol> packetProtocol, boolean skipCurrentPipeline) throws Exception {
         if (!isCancelled()) {
-            // Apply current pipeline
-            List<Protocol> protocols = new ArrayList<>(user().get(ProtocolInfo.class).getPipeline().pipes());
-            // Other way if outgoing
-            Collections.reverse(protocols);
-            int index = 0;
-            for (int i = 0; i < protocols.size(); i++) {
-                if (protocols.get(i).getClass().equals(packetProtocol)) {
-                    index = skipCurrentPipeline ? (i + 1) : (i);
-                    break;
-                }
-            }
-
-            // Reset reader before we start
-            resetReader();
-
-            // Apply other protocols
-            apply(Direction.OUTGOING, user().get(ProtocolInfo.class).getState(), index, protocols);
-            // Send
-            ByteBuf output = inputBuffer == null ? Unpooled.buffer() : inputBuffer.alloc().buffer();
-            writeToBuffer(output);
+            ByteBuf output = constructPacket(packetProtocol, skipCurrentPipeline);
             user().sendRawPacket(output);
         }
+    }
+
+    /**
+     * Let the packet go through the protocol pipes and write it to ByteBuf
+     *
+     * @param packetProtocol      - The protocol version of the packet.
+     * @param skipCurrentPipeline - Skip the current pipeline
+     * @return Packet buffer
+     * @throws Exception if it fails to write
+     */
+    private ByteBuf constructPacket(Class<? extends Protocol> packetProtocol, boolean skipCurrentPipeline) throws Exception {
+        // Apply current pipeline
+        List<Protocol> protocols = new ArrayList<>(user().get(ProtocolInfo.class).getPipeline().pipes());
+        // Other way if outgoing
+        Collections.reverse(protocols);
+        int index = 0;
+        for (int i = 0; i < protocols.size(); i++) {
+            if (protocols.get(i).getClass().equals(packetProtocol)) {
+                index = skipCurrentPipeline ? (i + 1) : (i);
+                break;
+            }
+        }
+
+        // Reset reader before we start
+        resetReader();
+
+        // Apply other protocols
+        apply(Direction.OUTGOING, user().get(ProtocolInfo.class).getState(), index, protocols);
+        // Send
+        ByteBuf output = inputBuffer == null ? Unpooled.buffer() : inputBuffer.alloc().buffer();
+        writeToBuffer(output);
+
+        return output;
     }
 
     /**
@@ -316,6 +332,24 @@ public class PacketWrapper {
      */
     public void send(Class<? extends Protocol> packetProtocol) throws Exception {
         send(packetProtocol, true);
+    }
+
+    /**
+     * Send this packet to the associated user.
+     * Be careful not to send packets twice.
+     * (Sends it after current)
+     * Also returns the packets ChannelFuture
+     *
+     * @param packetProtocol - The protocol version of the packet.
+     * @return The packets ChannelFuture
+     * @throws Exception if it fails to write
+     */
+    public ChannelFuture sendFuture(Class<? extends Protocol> packetProtocol) throws Exception {
+        if (!isCancelled()) {
+            ByteBuf output = constructPacket(packetProtocol, true);
+            return user().sendRawPacketFuture(output);
+        }
+        return user().getChannel().newFailedFuture(new Exception("Cancelled packet"));
     }
 
     /**
@@ -410,6 +444,10 @@ public class PacketWrapper {
      * Reset the reader, so that it can be read again.
      */
     public void resetReader() {
+        // Move readable objects are packet values
+        this.packetValues.addAll(readableObjects);
+        this.readableObjects.clear();
+        // Move all packet values to the readable for next packet.
         this.readableObjects.addAll(packetValues);
         this.packetValues.clear();
     }
